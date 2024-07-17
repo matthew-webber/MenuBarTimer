@@ -4,6 +4,7 @@ struct TimerView: View {
     @State private var minutes: String = ""
     @State private var timeRemaining: Int?
     @State private var timer: Timer?
+    @State private var isPaused: Bool = false
 
     var body: some View {
         VStack {
@@ -31,7 +32,9 @@ struct TimerView: View {
         timeRemaining = minutes * 60
         timer?.invalidate()
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
-            updateTimer()
+            DispatchQueue.main.async {
+                self.updateTimer()
+            }
         }
     }
 
@@ -39,13 +42,22 @@ struct TimerView: View {
         if let timeRemaining = self.timeRemaining, timeRemaining > 0 {
             self.timeRemaining = timeRemaining - 1
         } else {
-            self.timer?.invalidate()
-            self.timeRemaining = nil
+            timer?.invalidate()
+            timeRemaining = nil
         }
     }
 
     func pauseTimer() {
-        timer?.invalidate()
+        isPaused.toggle()
+        if isPaused {
+            timer?.invalidate()
+        } else {
+            timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+                DispatchQueue.main.async {
+                    self.updateTimer()
+                }
+            }
+        }
     }
 
     func endTimer() {

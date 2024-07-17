@@ -13,7 +13,9 @@ struct MenuBarTimerApp: App {
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem!
-    var timerView: TimerView!
+    var timer: Timer?
+    var timeRemaining: Int?
+    var isPaused: Bool = false
 
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         // Create the status item
@@ -22,21 +24,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             button.image = NSImage(systemSymbolName: "clock", accessibilityDescription: "Timer")
             button.action = #selector(showMenu)
         }
-
-        timerView = TimerView()
-        constructMenu()
     }
 
     @objc func showMenu() {
         if let button = statusItem.button {
             let menu = NSMenu()
 
-            let timerViewItem = NSHostingView(rootView: timerView)
-            timerViewItem.frame = NSRect(x: 0, y: 0, width: 200, height: 100)
-            let customMenuItem = NSMenuItem()
-            customMenuItem.view = timerViewItem
+            let textFieldItem = NSMenuItem()
+            let textField = NSTextField(string: "")
+            textField.placeholderString = "Minutes"
+            textField.target = self
+            textField.action = #selector(startTimer(_:))
+            textFieldItem.view = textField
 
-            menu.addItem(customMenuItem)
+            menu.addItem(textFieldItem)
             menu.addItem(NSMenuItem.separator())
             menu.addItem(NSMenuItem(title: "Pause Timer", action: #selector(pauseTimer), keyEquivalent: "p"))
             menu.addItem(NSMenuItem(title: "End Timer", action: #selector(endTimer), keyEquivalent: "e"))
@@ -48,15 +49,62 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    func constructMenu() {
-        // This method remains empty since we create the menu dynamically in showMenu()
+    @objc func startTimer(_ sender: NSTextField) {
+        guard let minutes = Int(sender.stringValue) else { return }
+        timeRemaining = minutes * 60
+        timer?.invalidate()
+        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+            DispatchQueue.main.async {
+                self.updateTimer()
+            }
+        }
+        updateButtonTitle()
+    }
+
+    func updateTimer() {
+        if let timeRemaining = self.timeRemaining, timeRemaining > 0 {
+            self.timeRemaining = timeRemaining - 1
+            updateButtonTitle()
+        } else {
+            timer?.invalidate()
+            timeRemaining = nil
+            updateButtonTitle()
+        }
+    }
+
+    func updateButtonTitle() {
+        if let button = statusItem.button {
+            if let timeRemaining = self.timeRemaining {
+                button.title = timeString(time: timeRemaining)
+            } else {
+                button.title = ""
+                button.image = NSImage(systemSymbolName: "clock", accessibilityDescription: "Timer")
+            }
+        }
     }
 
     @objc func pauseTimer() {
-        timerView.pauseTimer()
+        isPaused.toggle()
+        if isPaused {
+            timer?.invalidate()
+        } else {
+            timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+                DispatchQueue.main.async {
+                    self.updateTimer()
+                }
+            }
+        }
     }
 
     @objc func endTimer() {
-        timerView.endTimer()
+        timer?.invalidate()
+        timeRemaining = nil
+        updateButtonTitle()
+    }
+
+    func timeString(time: Int) -> String {
+        let minutes = time / 60
+        let seconds = time % 60
+        return String(format: "%02d:%02d", minutes, seconds)
     }
 }
