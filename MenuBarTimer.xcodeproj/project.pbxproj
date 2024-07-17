@@ -14,6 +14,8 @@
 		0C2C97082C481425002E785C /* MenuBarTimerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C2C97072C481425002E785C /* MenuBarTimerTests.swift */; };
 		0C2C97122C481425002E785C /* MenuBarTimerUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C2C97112C481425002E785C /* MenuBarTimerUITests.swift */; };
 		0C2C97142C481425002E785C /* MenuBarTimerUITestsLaunchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C2C97132C481425002E785C /* MenuBarTimerUITestsLaunchTests.swift */; };
+		0CFFE0252C4816DC00AC4214 /* TimerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CFFE0242C4816DC00AC4214 /* TimerView.swift */; };
+		0CFFE0272C4818C300AC4214 /* TimerViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CFFE0262C4818C300AC4214 /* TimerViewController.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -45,6 +47,8 @@
 		0C2C970D2C481425002E785C /* MenuBarTimerUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MenuBarTimerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		0C2C97112C481425002E785C /* MenuBarTimerUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarTimerUITests.swift; sourceTree = "<group>"; };
 		0C2C97132C481425002E785C /* MenuBarTimerUITestsLaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarTimerUITestsLaunchTests.swift; sourceTree = "<group>"; };
+		0CFFE0242C4816DC00AC4214 /* TimerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerView.swift; sourceTree = "<group>"; };
+		0CFFE0262C4818C300AC4214 /* TimerViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerViewController.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -100,6 +104,8 @@
 				0C2C96F92C481425002E785C /* Assets.xcassets */,
 				0C2C96FE2C481425002E785C /* MenuBarTimer.entitlements */,
 				0C2C96FB2C481425002E785C /* Preview Content */,
+				0CFFE0242C4816DC00AC4214 /* TimerView.swift */,
+				0CFFE0262C4818C300AC4214 /* TimerViewController.swift */,
 			);
 			path = MenuBarTimer;
 			sourceTree = "<group>";
@@ -259,6 +265,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				0CFFE0272C4818C300AC4214 /* TimerViewController.swift in Sources */,
+				0CFFE0252C4816DC00AC4214 /* TimerView.swift in Sources */,
 				0C2C96F82C481424002E785C /* ContentView.swift in Sources */,
 				0C2C96F62C481424002E785C /* MenuBarTimerApp.swift in Sources */,
 			);
