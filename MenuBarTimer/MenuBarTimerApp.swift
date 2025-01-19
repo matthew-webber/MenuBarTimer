@@ -1,4 +1,5 @@
 import SwiftUI
+import UserNotifications
 
 @main
 struct MenuBarTimerApp: App {
@@ -16,8 +17,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var timer: Timer?
     var timeRemaining: Int?
     var isPaused: Bool = false
+    var initialTime: Int?
+    var shouldClearZeroTimer: Bool = false
 
     func applicationDidFinishLaunching(_ aNotification: Notification) {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
+            if let error = error {
+                print("Notification permission error: \(error)")
+            }
+        }
+        
         // Create the status item
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusItem.button {
@@ -35,6 +44,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             textField.placeholderString = "Minutes"
             textField.target = self
             textField.action = #selector(startTimer(_:))
+            textField.frame = NSRect(x: 0, y: 0, width: 100, height: 30)
+            if let initialTime = initialTime {
+                textField.stringValue = "\(initialTime / 60)"
+            }
             textFieldItem.view = textField
 
             menu.addItem(textFieldItem)
@@ -50,15 +63,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func startTimer(_ sender: NSTextField) {
-        guard let minutes = Int(sender.stringValue) else { return }
-        timeRemaining = minutes * 60
+        guard let input = Double(sender.stringValue) else { return } // Accept fractional input
+        let minutesPart = Int(input) // Whole number part represents minutes
+        let secondsPart = Int((input - Double(minutesPart)) * 60) // Fractional part converted to seconds
+
+        timeRemaining = (minutesPart * 60) + secondsPart
+        initialTime = timeRemaining
         timer?.invalidate()
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
             DispatchQueue.main.async {
                 self.updateTimer()
             }
         }
+        sender.stringValue = ""
         updateButtonTitle()
+        statusItem.menu?.cancelTracking() // Close the menu after starting the timer
     }
 
     func updateTimer() {
@@ -68,6 +87,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             timer?.invalidate()
             timeRemaining = nil
+            initialTime = 0
+            shouldClearZeroTimer = false
             updateButtonTitle()
         }
     }
@@ -76,6 +97,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if let button = statusItem.button {
             if let timeRemaining = self.timeRemaining {
                 button.title = timeString(time: timeRemaining)
+            } else if initialTime == 0 && shouldClearZeroTimer == false {
+                button.title = "00:00"
             } else {
                 button.title = ""
                 button.image = NSImage(systemSymbolName: "clock", accessibilityDescription: "Timer")
@@ -99,6 +122,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func endTimer() {
         timer?.invalidate()
         timeRemaining = nil
+        initialTime = 0
+        shouldClearZeroTimer = true
         updateButtonTitle()
     }
 
