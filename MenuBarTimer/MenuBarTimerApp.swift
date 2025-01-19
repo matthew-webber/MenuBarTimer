@@ -84,12 +84,35 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if let timeRemaining = self.timeRemaining, timeRemaining > 0 {
             self.timeRemaining = timeRemaining - 1
             updateButtonTitle()
-        } else {
+        } else if timeRemaining == 0 {
             timer?.invalidate()
             timeRemaining = nil
             initialTime = 0
             shouldClearZeroTimer = false
             updateButtonTitle()
+
+            // Send a notification
+            sendTimerDoneNotification()
+        }
+    }
+
+    func sendTimerDoneNotification() {
+        let content = UNMutableNotificationContent()
+        content.title = "Timer Completed"
+        content.body = "Your timer is up!"
+        content.sound = .default
+
+        // Create a trigger for immediate delivery
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+
+        // Create the notification request
+        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: trigger)
+
+        // Add the notification to the center
+        UNUserNotificationCenter.current().add(request) { error in
+            if let error = error {
+                print("Failed to deliver notification: \(error)")
+            }
         }
     }
 
