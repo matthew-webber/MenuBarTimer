@@ -38,7 +38,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func showMenu() {
-        if let button = statusItem.button {
+        if (statusItem.button != nil) {
             let menu = NSMenu()
 
             // Add a text field for timer input
