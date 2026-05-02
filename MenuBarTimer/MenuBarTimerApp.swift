@@ -283,6 +283,21 @@ final class GlobalHotkey {
     }
 }
 
+// MARK: - Menu layout
+
+private enum TimerInputMetrics {
+    static let menuWidth: CGFloat = 180
+    static let rowHeight: CGFloat = 28
+    static let inputX: CGFloat = 12
+    static let inputY: CGFloat = 2
+    static let inputWidth: CGFloat = 56
+    static let inputHeight: CGFloat = 24
+    static let unitX: CGFloat = 76
+    static let unitY: CGFloat = 6
+    static let unitWidth: CGFloat = 34
+    static let unitHeight: CGFloat = 16
+}
+
 // MARK: - App delegate
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotificationCenterDelegate {
@@ -443,17 +458,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
     }
 
     private func addInputField(to menu: NSMenu, autoFocus: Bool) {
-        let container = NSView(frame: NSRect(x: 0, y: 0, width: 180, height: 28))
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: TimerInputMetrics.menuWidth, height: TimerInputMetrics.rowHeight))
         let textField = NSTextField(string: "")
         textField.placeholderString = "Minutes"
         textField.target = self
         textField.action = #selector(startTimerFromTextField(_:))
+        textField.formatter = MaxLengthFormatter(maxCharacters: 3)
         textField.cell?.sendsActionOnEndEditing = false
-        textField.frame = NSRect(x: 12, y: 2, width: 160, height: 24)
+        textField.frame = NSRect(
+            x: TimerInputMetrics.inputX,
+            y: TimerInputMetrics.inputY,
+            width: TimerInputMetrics.inputWidth,
+            height: TimerInputMetrics.inputHeight
+        )
 
         textField.stringValue = timerInputValue()
 
+        let unitLabel = NSTextField(labelWithString: "min")
+        unitLabel.font = NSFont.menuFont(ofSize: 0)
+        unitLabel.textColor = .secondaryLabelColor
+        unitLabel.frame = NSRect(
+            x: TimerInputMetrics.unitX,
+            y: TimerInputMetrics.unitY,
+            width: TimerInputMetrics.unitWidth,
+            height: TimerInputMetrics.unitHeight
+        )
+
         container.addSubview(textField)
+        container.addSubview(unitLabel)
         let item = NSMenuItem()
         item.view = container
         inputTextField = textField
@@ -488,9 +520,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
     private func timerInputValue() -> String {
         let store = SettingsStore.shared
         if let last = lastEnteredMinutes, !last.isEmpty {
-            return last
+            return String(last.prefix(3))
         } else if store.defaultMinutes > 0 {
-            return String(format: "%g", store.defaultMinutes)
+            return String(String(format: "%g", store.defaultMinutes).prefix(3))
         }
         return ""
     }
@@ -669,6 +701,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
     }
 }
 
+// MARK: - Text field formatting
+
+private final class MaxLengthFormatter: Formatter {
+    private let maxCharacters: Int
+
+    init(maxCharacters: Int) {
+        self.maxCharacters = maxCharacters
+        super.init()
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func string(for obj: Any?) -> String? {
+        guard let obj else { return nil }
+        if let string = obj as? String { return string }
+        return "\(obj)"
+    }
+
+    override func getObjectValue(
+        _ obj: AutoreleasingUnsafeMutablePointer<AnyObject?>?,
+        for string: String,
+        errorDescription error: AutoreleasingUnsafeMutablePointer<NSString?>?
+    ) -> Bool {
+        obj?.pointee = String(string.prefix(maxCharacters)) as NSString
+        return true
+    }
+
+    override func isPartialStringValid(
+        _ partialStringPtr: AutoreleasingUnsafeMutablePointer<NSString>,
+        proposedSelectedRange proposedSelRangePtr: NSRangePointer?,
+        originalString origString: String,
+        originalSelectedRange origSelRange: NSRange,
+        errorDescription error: AutoreleasingUnsafeMutablePointer<NSString?>?
+    ) -> Bool {
+        guard partialStringPtr.pointee.length > maxCharacters else { return true }
+        partialStringPtr.pointee = partialStringPtr.pointee.substring(to: maxCharacters) as NSString
+        proposedSelRangePtr?.pointee = NSRange(location: maxCharacters, length: 0)
+        return false
+    }
+}
+
 // MARK: - Menu button view
 
 // A custom view-based menu item. Unlike a standard NSMenuItem action, clicking
@@ -677,6 +750,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
 final class MenuButtonView: NSView {
     private let label = NSTextField(labelWithString: "")
     private let textField = NSTextField(string: "")
+    private let unitLabel = NSTextField(labelWithString: "min")
     var onClick: (() -> Void)?
     private var showingInput = false
     private var hovered = false {
@@ -684,21 +758,38 @@ final class MenuButtonView: NSView {
     }
 
     init(title: String) {
-        super.init(frame: NSRect(x: 0, y: 0, width: 180, height: 28))
+        super.init(frame: NSRect(x: 0, y: 0, width: TimerInputMetrics.menuWidth, height: TimerInputMetrics.rowHeight))
         label.stringValue = title
         label.font = NSFont.menuFont(ofSize: 0)
         label.isBezeled = false
         label.drawsBackground = false
         label.isEditable = false
         label.isSelectable = false
-        label.frame = NSRect(x: 21, y: 6, width: 150, height: 16)
+        label.frame = NSRect(x: 12, y: 6, width: 150, height: 16)
         addSubview(label)
 
         textField.placeholderString = "Minutes"
+        textField.formatter = MaxLengthFormatter(maxCharacters: 3)
         textField.cell?.sendsActionOnEndEditing = false
-        textField.frame = NSRect(x: 12, y: 2, width: 160, height: 24)
+        textField.frame = NSRect(
+            x: TimerInputMetrics.inputX,
+            y: TimerInputMetrics.inputY,
+            width: TimerInputMetrics.inputWidth,
+            height: TimerInputMetrics.inputHeight
+        )
         textField.isHidden = true
         addSubview(textField)
+
+        unitLabel.font = NSFont.menuFont(ofSize: 0)
+        unitLabel.textColor = .secondaryLabelColor
+        unitLabel.frame = NSRect(
+            x: TimerInputMetrics.unitX,
+            y: TimerInputMetrics.unitY,
+            width: TimerInputMetrics.unitWidth,
+            height: TimerInputMetrics.unitHeight
+        )
+        unitLabel.isHidden = true
+        addSubview(unitLabel)
 
         addTrackingArea(NSTrackingArea(
             rect: .zero,
@@ -718,6 +809,7 @@ final class MenuButtonView: NSView {
         hovered = false
         label.isHidden = true
         textField.isHidden = false
+        unitLabel.isHidden = false
         textField.stringValue = value
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
