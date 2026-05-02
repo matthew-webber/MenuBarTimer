@@ -10,11 +10,9 @@ struct MenuBarTimerApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {
-        Settings {
-            SettingsView()
-                .environmentObject(SettingsStore.shared)
-                .frame(width: 460)
-        }
+        // Settings window is opened manually via AppDelegate to avoid the
+        // "Please use SettingsLink" error on macOS 15+.
+        Settings { EmptyView() }
     }
 }
 
@@ -204,9 +202,9 @@ final class TimerController {
 
     private func startTicker() {
         ticker?.invalidate()
-        ticker = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            self?.tick()
-        }
+        let t = Timer(timeInterval: 1, repeats: true) { [weak self] _ in self?.tick() }
+        RunLoop.main.add(t, forMode: .common)
+        ticker = t
     }
     private func stopTicker() {
         ticker?.invalidate()
@@ -297,6 +295,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
     private var hotkeys: [GlobalHotkey] = []
 
     private weak var inputTextField: NSTextField?
+    private var settingsWindowController: NSWindowController?
+    private var showingInput = false
+    private var lastEnteredMinutes: String?
 
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -392,44 +393,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
 
-        let textFieldItem = NSMenuItem()
-        let textField = NSTextField(string: "")
-        textField.placeholderString = "Minutes"
-        textField.target = self
-        textField.action = #selector(startTimerFromTextField(_:))
-        textField.frame = NSRect(x: 0, y: 0, width: 160, height: 24)
-        if let remaining = controller.state.remainingSeconds {
-            textField.stringValue = String(format: "%g", Double(remaining) / 60.0)
+        let shouldShowInput = controller.state == .idle || showingInput
+        if shouldShowInput {
+            // Auto-focus only when the user explicitly asked for the input by
+            // clicking "New Timer" (showingInput=true). On a plain idle-state
+            // menu open, focusing inside the async block races with the menu's
+            // mouse tracking and causes the textfield's action to fire — which
+            // immediately starts a timer.
+            addInputField(to: menu, autoFocus: showingInput)
         } else {
-            let store = SettingsStore.shared
-            if store.defaultMinutes > 0 {
-                textField.stringValue = String(format: "%g", store.defaultMinutes)
-            }
+            addNewTimerButton(to: menu)
         }
-        let container = NSView(frame: NSRect(x: 0, y: 0, width: 180, height: 28))
-        textField.frame = NSRect(x: 12, y: 2, width: 160, height: 24)
-        container.addSubview(textField)
-        textFieldItem.view = container
-        inputTextField = textField
-        menu.addItem(textFieldItem)
 
-        menu.addItem(NSMenuItem.separator())
-
-        let toggleTitle: String
+        // In idle state the text field is the only way to start a timer — no toggle
+        // item here, which also prevents it from landing in the click zone of the
+        // mouse-up event that opened the menu. For active states the toggle/end
+        // items appear without a separator (B4).
         switch controller.state {
-        case .idle: toggleTitle = "Start Timer"
-        case .armed: toggleTitle = "Resume Timer"
-        case .running: toggleTitle = "Pause Timer"
-        case .done: toggleTitle = "Dismiss"
-        }
-        let toggleItem = NSMenuItem(title: toggleTitle, action: #selector(toggleAction), keyEquivalent: "")
-        toggleItem.target = self
-        menu.addItem(toggleItem)
-
-        if controller.state != .idle {
-            let endItem = NSMenuItem(title: "End Timer", action: #selector(endAction), keyEquivalent: "")
-            endItem.target = self
-            menu.addItem(endItem)
+        case .idle:
+            break
+        case .armed:
+            let item = NSMenuItem(title: "Resume Timer", action: #selector(toggleAction), keyEquivalent: "")
+            item.target = self
+            menu.addItem(item)
+            let end = NSMenuItem(title: "End Timer", action: #selector(endAction), keyEquivalent: "")
+            end.target = self
+            menu.addItem(end)
+        case .running:
+            let item = NSMenuItem(title: "Pause Timer", action: #selector(toggleAction), keyEquivalent: "")
+            item.target = self
+            menu.addItem(item)
+            let end = NSMenuItem(title: "End Timer", action: #selector(endAction), keyEquivalent: "")
+            end.target = self
+            menu.addItem(end)
+        case .done:
+            let item = NSMenuItem(title: "Dismiss", action: #selector(toggleAction), keyEquivalent: "")
+            item.target = self
+            menu.addItem(item)
         }
 
         menu.addItem(NSMenuItem.separator())
@@ -440,6 +440,63 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
 
         let quitItem = NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         menu.addItem(quitItem)
+    }
+
+    private func addInputField(to menu: NSMenu, autoFocus: Bool) {
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 180, height: 28))
+        let textField = NSTextField(string: "")
+        textField.placeholderString = "Minutes"
+        textField.target = self
+        textField.action = #selector(startTimerFromTextField(_:))
+        textField.cell?.sendsActionOnEndEditing = false
+        textField.frame = NSRect(x: 12, y: 2, width: 160, height: 24)
+
+        textField.stringValue = timerInputValue()
+
+        container.addSubview(textField)
+        let item = NSMenuItem()
+        item.view = container
+        inputTextField = textField
+        menu.addItem(item)
+
+        if autoFocus {
+            DispatchQueue.main.async { [weak textField] in
+                guard let tf = textField else { return }
+                tf.window?.makeFirstResponder(tf)
+                tf.selectText(nil)
+            }
+        }
+    }
+
+    private func addNewTimerButton(to menu: NSMenu) {
+        let view = MenuButtonView(title: "New Timer")
+        view.configureInput(target: self, action: #selector(startTimerFromTextField(_:)))
+        view.onClick = { [weak self, weak view] in
+            guard let self, let view else { return }
+            self.activateInputInPlace(view)
+        }
+        let item = NSMenuItem()
+        item.view = view
+        menu.addItem(item)
+    }
+
+    private func activateInputInPlace(_ view: MenuButtonView) {
+        showingInput = true
+        view.showInput(value: timerInputValue())
+    }
+
+    private func timerInputValue() -> String {
+        let store = SettingsStore.shared
+        if let last = lastEnteredMinutes, !last.isEmpty {
+            return last
+        } else if store.defaultMinutes > 0 {
+            return String(format: "%g", store.defaultMinutes)
+        }
+        return ""
+    }
+
+    func menuDidClose(_ menu: NSMenu) {
+        if controller.state != .idle { showingInput = false }
     }
 
     func menuWillOpen(_ menu: NSMenu) {
@@ -454,6 +511,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
 
     @objc private func startTimerFromTextField(_ sender: NSTextField) {
         guard let input = Double(sender.stringValue), input > 0 else { return }
+        lastEnteredMinutes = sender.stringValue
         let minutes = Int(input)
         let seconds = Int(((input - Double(minutes)) * 60).rounded())
         let total = minutes * 60 + seconds
@@ -466,12 +524,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
     @objc private func endAction() { controller.endTimer() }
 
     @objc private func openSettings() {
-        NSApp.activate(ignoringOtherApps: true)
-        if #available(macOS 14, *) {
-            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-        } else {
-            NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
+        if settingsWindowController == nil {
+            let host = NSHostingController(
+                rootView: SettingsView()
+                    .environmentObject(SettingsStore.shared)
+                    .frame(width: 460)
+            )
+            host.view.layout()
+            let size = host.view.fittingSize
+            let window = NSWindow(contentViewController: host)
+            window.title = "Settings"
+            window.styleMask = [.titled, .closable, .miniaturizable]
+            window.setContentSize(size.height > 100 ? size : NSSize(width: 460, height: 380))
+            window.isReleasedWhenClosed = false
+            window.center()
+            settingsWindowController = NSWindowController(window: window)
         }
+        NSApp.activate(ignoringOtherApps: true)
+        settingsWindowController?.showWindow(nil)
     }
 
     // MARK: Done state
@@ -596,5 +666,89 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
         let m = seconds / 60
         let s = seconds % 60
         return String(format: "%02d:%02d", m, s)
+    }
+}
+
+// MARK: - Menu button view
+
+// A custom view-based menu item. Unlike a standard NSMenuItem action, clicking
+// this view does not dismiss the menu, which lets us swap "New Timer" for the
+// input field in place.
+final class MenuButtonView: NSView {
+    private let label = NSTextField(labelWithString: "")
+    private let textField = NSTextField(string: "")
+    var onClick: (() -> Void)?
+    private var showingInput = false
+    private var hovered = false {
+        didSet { needsDisplay = true; updateLabelColor() }
+    }
+
+    init(title: String) {
+        super.init(frame: NSRect(x: 0, y: 0, width: 180, height: 28))
+        label.stringValue = title
+        label.font = NSFont.menuFont(ofSize: 0)
+        label.isBezeled = false
+        label.drawsBackground = false
+        label.isEditable = false
+        label.isSelectable = false
+        label.frame = NSRect(x: 21, y: 6, width: 150, height: 16)
+        addSubview(label)
+
+        textField.placeholderString = "Minutes"
+        textField.cell?.sendsActionOnEndEditing = false
+        textField.frame = NSRect(x: 12, y: 2, width: 160, height: 24)
+        textField.isHidden = true
+        addSubview(textField)
+
+        addTrackingArea(NSTrackingArea(
+            rect: .zero,
+            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            owner: self,
+            userInfo: nil))
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    func configureInput(target: AnyObject, action: Selector) {
+        textField.target = target
+        textField.action = action
+    }
+
+    func showInput(value: String) {
+        showingInput = true
+        hovered = false
+        label.isHidden = true
+        textField.isHidden = false
+        textField.stringValue = value
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.window?.makeFirstResponder(self.textField)
+            self.textField.selectText(nil)
+        }
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        guard !showingInput else { return }
+        hovered = true
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        guard !showingInput else { return }
+        hovered = false
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        guard !showingInput else { return }
+        onClick?()
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        if hovered && !showingInput {
+            NSColor.selectedContentBackgroundColor.setFill()
+            bounds.fill()
+        }
+    }
+
+    private func updateLabelColor() {
+        label.textColor = hovered ? .white : .labelColor
     }
 }
