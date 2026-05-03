@@ -18,121 +18,135 @@ struct SettingsView: View {
             shortcutsTab
                 .tabItem { Label("Shortcuts", systemImage: "keyboard") }
         }
-        .padding(20)
+        .frame(width: 400)
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     private var generalTab: some View {
         Form {
-            HStack {
-                Text("Default duration:")
-                TextField("", value: $store.defaultMinutes, formatter: minutesFormatter)
-                    .frame(width: 70)
-                Stepper("", value: $store.defaultMinutes, in: 0.5...600, step: 0.5)
-                    .labelsHidden()
-                Text("minutes")
-                    .foregroundStyle(.secondary)
+            Section {
+                LabeledContent("Default duration") {
+                    HStack(spacing: 6) {
+                        TextField("", value: $store.defaultMinutes, formatter: minutesFormatter)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 60)
+                        Stepper("", value: $store.defaultMinutes, in: 0.5...600, step: 0.5)
+                            .labelsHidden()
+                        Text("minutes").foregroundStyle(.secondary)
+                    }
+                }
+                LabeledContent("Increment / decrement step") {
+                    HStack(spacing: 6) {
+                        TextField("", value: $store.incrementSeconds, formatter: NumberFormatter())
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 60)
+                        Stepper("", value: $store.incrementSeconds, in: 5...3600, step: 5)
+                            .labelsHidden()
+                        Text("seconds").foregroundStyle(.secondary)
+                    }
+                }
             }
-            HStack {
-                Text("Increment / decrement step:")
-                TextField("", value: $store.incrementSeconds, formatter: NumberFormatter())
-                    .frame(width: 60)
-                Stepper("", value: $store.incrementSeconds, in: 5...3600, step: 5)
-                    .labelsHidden()
-                Text("seconds")
-                    .foregroundStyle(.secondary)
+
+            Section {
+                Toggle("Hide clock icon while timer is active", isOn: $store.hideClockWhenRunning)
+                Toggle("Show macOS notification when timer ends", isOn: $store.showNotification)
+                Toggle("Show menu bar alert message when timer ends", isOn: $store.showTimeUpMessage)
             }
-            Toggle("Hide clock icon while timer is active", isOn: $store.hideClockWhenRunning)
-            Toggle("Show macOS notification when timer ends", isOn: $store.showNotification)
-            Toggle("Show menu bar alert message when timer ends", isOn: $store.showTimeUpMessage)
         }
-        .padding(.vertical, 8)
+        .formStyle(.grouped)
     }
 
     private var themeTab: some View {
-        let labelWidth: CGFloat = 70
-
         Form {
-            HStack {
-                Text("Color:")
-                    .frame(width: labelWidth, alignment: .trailing)
-                Picker("", selection: $store.alertColor) {
-                    ForEach(store.availableAlertColors, id: \.self) { color in
-                        HStack {
-                            Circle()
-                                .fill(Color(nsColor: color.nsColor))
-                                .frame(width: 10, height: 10)
-                            Text(color.displayName)
+            Section {
+                LabeledContent("Alert color") {
+                    Picker("", selection: $store.alertColor) {
+                        ForEach(store.availableAlertColors, id: \.self) { color in
+                            HStack {
+                                Circle()
+                                    .fill(Color(nsColor: color.nsColor))
+                                    .frame(width: 10, height: 10)
+                                Text(color.displayName)
+                            }
+                            .tag(color)
                         }
-                        .tag(color)
                     }
+                    .labelsHidden()
+                    .frame(width: 160)
                 }
-                .labelsHidden()
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
-            HStack {
-                Text("Message:")
-                    .frame(width: labelWidth, alignment: .trailing)
-                TextField("", text: alertMessageBinding)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                LabeledContent("Alert message") {
+                    TextField("", text: alertMessageBinding)
+                        .frame(width: 200)
+                }
+            } footer: {
+                Text("Shown in the menu bar when a timer ends.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
-        .padding(.vertical, 8)
+        .formStyle(.grouped)
     }
 
     private var soundTab: some View {
         Form {
-            Toggle("Play sound when timer ends", isOn: $store.playSound)
-            HStack {
-                Text("Sound:")
-                Picker("", selection: $store.soundName) {
-                    ForEach(store.availableSounds, id: \.self) { name in
-                        Text(name).tag(name)
+            Section {
+                Toggle("Play sound when timer ends", isOn: $store.playSound)
+                LabeledContent("Sound") {
+                    HStack(spacing: 8) {
+                        Picker("", selection: $store.soundName) {
+                            ForEach(store.availableSounds, id: \.self) { name in
+                                Text(name).tag(name)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(width: 160)
+                        Button("Test") { previewSound() }
                     }
                 }
-                .labelsHidden()
-                .frame(width: 160)
                 .disabled(!store.playSound)
-                Button("Test") { previewSound() }
+            }
+
+            Section {
+                Toggle("Repeat sound until acknowledged", isOn: $store.repeatSound)
                     .disabled(!store.playSound)
+                LabeledContent("Repeat every") {
+                    HStack(spacing: 6) {
+                        TextField("", value: $store.repeatSoundInterval, formatter: NumberFormatter())
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 60)
+                        Stepper("", value: $store.repeatSoundInterval, in: 1...60)
+                            .labelsHidden()
+                        Text("seconds").foregroundStyle(.secondary)
+                    }
+                }
+                .disabled(!store.playSound || !store.repeatSound)
             }
-            Toggle("Repeat sound until acknowledged", isOn: $store.repeatSound)
-                .disabled(!store.playSound)
-            HStack {
-                Text("Repeat every:")
-                TextField("", value: $store.repeatSoundInterval, formatter: NumberFormatter())
-                    .frame(width: 50)
-                Stepper("", value: $store.repeatSoundInterval, in: 1...60)
-                    .labelsHidden()
-                Text("seconds")
-                    .foregroundStyle(.secondary)
-            }
-            .disabled(!store.playSound || !store.repeatSound)
         }
-        .padding(.vertical, 8)
+        .formStyle(.grouped)
     }
 
     private var shortcutsTab: some View {
         Form {
-            Text("Global shortcuts work anywhere on the system. Click Record, then press a combination including at least one modifier (⌘ ⌥ ⌃ ⇧).")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.bottom, 6)
-
-            shortcutRow(title: "Toggle (start / pause / dismiss)", binding: $store.toggleHotkey)
-            shortcutRow(title: "Increase timer", binding: $store.incrementHotkey)
-            shortcutRow(title: "Decrease timer", binding: $store.decrementHotkey)
+            Section {
+                shortcutRow(title: "Toggle (start / pause / dismiss)", binding: $store.toggleHotkey)
+                shortcutRow(title: "Increase timer", binding: $store.incrementHotkey)
+                shortcutRow(title: "Decrease timer", binding: $store.decrementHotkey)
+            } header: {
+                Text("Global shortcuts work anywhere on the system. Click Record, then press a combination including at least one modifier (⌘ ⌥ ⌃ ⇧).")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textCase(nil)
+                    .padding(.bottom, 4)
+            }
         }
-        .padding(.vertical, 8)
+        .formStyle(.grouped)
     }
 
     private func shortcutRow(title: String, binding: Binding<HotkeyBinding>) -> some View {
-        HStack {
-            Text(title)
-            Spacer()
+        LabeledContent(title) {
             HotkeyRecorderField(binding: binding)
-                .frame(width: 200, height: 26)
+                .frame(width: 220, height: 26)
         }
     }
 

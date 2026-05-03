@@ -639,14 +639,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
             let host = NSHostingController(
                 rootView: SettingsView()
                     .environmentObject(SettingsStore.shared)
-                    .frame(width: 460)
             )
-            host.view.layout()
-            let size = host.view.fittingSize
             let window = NSWindow(contentViewController: host)
             window.title = "Settings"
             window.styleMask = [.titled, .closable, .miniaturizable]
-            window.setContentSize(size.height > 100 ? size : NSSize(width: 460, height: 380))
+            window.setContentSize(NSSize(width: 520, height: 380))
             window.isReleasedWhenClosed = false
             window.center()
             settingsWindowController = NSWindowController(window: window)
