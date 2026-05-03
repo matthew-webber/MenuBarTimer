@@ -11,6 +11,8 @@ struct SettingsView: View {
         TabView {
             generalTab
                 .tabItem { Label("General", systemImage: "gearshape") }
+            themeTab
+                .tabItem { Label("Theme", systemImage: "paintpalette") }
             soundTab
                 .tabItem { Label("Sound", systemImage: "speaker.wave.2") }
             shortcutsTab
@@ -40,6 +42,40 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
             Toggle("Hide clock icon while timer is active", isOn: $store.hideClockWhenRunning)
+            Toggle("Show macOS notification when timer ends", isOn: $store.showNotification)
+            Toggle("Show menu bar alert message when timer ends", isOn: $store.showTimeUpMessage)
+        }
+        .padding(.vertical, 8)
+    }
+
+    private var themeTab: some View {
+        let labelWidth: CGFloat = 70
+
+        Form {
+            HStack {
+                Text("Color:")
+                    .frame(width: labelWidth, alignment: .trailing)
+                Picker("", selection: $store.alertColor) {
+                    ForEach(store.availableAlertColors, id: \.self) { color in
+                        HStack {
+                            Circle()
+                                .fill(Color(nsColor: color.nsColor))
+                                .frame(width: 10, height: 10)
+                            Text(color.displayName)
+                        }
+                        .tag(color)
+                    }
+                }
+                .labelsHidden()
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            HStack {
+                Text("Message:")
+                    .frame(width: labelWidth, alignment: .trailing)
+                TextField("", text: alertMessageBinding)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
         .padding(.vertical, 8)
     }
@@ -103,6 +139,13 @@ struct SettingsView: View {
     private func previewSound() {
         let name = store.soundName == "Default" ? "Glass" : store.soundName
         NSSound(named: name)?.play()
+    }
+
+    private var alertMessageBinding: Binding<String> {
+        Binding(
+            get: { store.alertMessage },
+            set: { store.alertMessage = SettingsStore.sanitizeAlertMessage($0) }
+        )
     }
 
     private var minutesFormatter: NumberFormatter {

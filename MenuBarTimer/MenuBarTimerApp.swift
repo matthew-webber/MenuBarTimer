@@ -27,6 +27,40 @@ struct HotkeyBinding: Codable, Equatable {
     var isEmpty: Bool { displayString.isEmpty || modifiers == 0 }
 }
 
+enum TimerAlertColor: String, CaseIterable, Codable, Hashable {
+    case red
+    case orange
+    case yellow
+    case green
+    case blue
+    case purple
+    case pink
+
+    var displayName: String {
+        switch self {
+        case .red: return "Red"
+        case .orange: return "Orange"
+        case .yellow: return "Yellow"
+        case .green: return "Green"
+        case .blue: return "Blue"
+        case .purple: return "Purple"
+        case .pink: return "Pink"
+        }
+    }
+
+    var nsColor: NSColor {
+        switch self {
+        case .red: return .systemRed
+        case .orange: return .systemOrange
+        case .yellow: return .systemYellow
+        case .green: return .systemGreen
+        case .blue: return .systemBlue
+        case .purple: return .systemPurple
+        case .pink: return .systemPink
+        }
+    }
+}
+
 extension Notification.Name {
     static let hotkeyBindingsChanged = Notification.Name("MenuBarTimer.hotkeyBindingsChanged")
 }
@@ -45,6 +79,10 @@ final class SettingsStore: ObservableObject {
         static let repeatSound = "repeatSound"
         static let repeatSoundInterval = "repeatSoundInterval"
         static let hideClockWhenRunning = "hideClockWhenRunning"
+        static let showNotification = "showNotification"
+        static let showTimeUpMessage = "showTimeUpMessage"
+        static let alertColor = "alertColor"
+        static let alertMessage = "alertMessage"
         static let toggleHotkey = "toggleHotkey"
         static let incrementHotkey = "incrementHotkey"
         static let decrementHotkey = "decrementHotkey"
@@ -57,11 +95,28 @@ final class SettingsStore: ObservableObject {
     @Published var repeatSound: Bool { didSet { defaults.set(repeatSound, forKey: Key.repeatSound) } }
     @Published var repeatSoundInterval: Int { didSet { defaults.set(repeatSoundInterval, forKey: Key.repeatSoundInterval) } }
     @Published var hideClockWhenRunning: Bool { didSet { defaults.set(hideClockWhenRunning, forKey: Key.hideClockWhenRunning) } }
+    @Published var showNotification: Bool { didSet { defaults.set(showNotification, forKey: Key.showNotification) } }
+    @Published var showTimeUpMessage: Bool { didSet { defaults.set(showTimeUpMessage, forKey: Key.showTimeUpMessage) } }
+    @Published var alertColor: TimerAlertColor { didSet { defaults.set(alertColor.rawValue, forKey: Key.alertColor) } }
+    @Published var alertMessage: String {
+        didSet {
+            let sanitized = Self.sanitizeAlertMessage(alertMessage)
+            if alertMessage != sanitized {
+                alertMessage = sanitized
+            } else {
+                defaults.set(alertMessage, forKey: Key.alertMessage)
+            }
+        }
+    }
     @Published var toggleHotkey: HotkeyBinding { didSet { Self.save(toggleHotkey, key: Key.toggleHotkey); broadcastHotkeyChange() } }
     @Published var incrementHotkey: HotkeyBinding { didSet { Self.save(incrementHotkey, key: Key.incrementHotkey); broadcastHotkeyChange() } }
     @Published var decrementHotkey: HotkeyBinding { didSet { Self.save(decrementHotkey, key: Key.decrementHotkey); broadcastHotkeyChange() } }
 
     let availableSounds = ["Default", "Basso", "Blow", "Bottle", "Frog", "Funk", "Glass", "Hero", "Morse", "Ping", "Pop", "Purr", "Sosumi", "Submarine", "Tink"]
+    let availableAlertColors = TimerAlertColor.allCases
+
+    static let alertMessageLimit = 14
+    static let defaultAlertMessage = "Time's Up"
 
     private init() {
         defaults.register(defaults: [
@@ -72,6 +127,10 @@ final class SettingsStore: ObservableObject {
             Key.repeatSound: false,
             Key.repeatSoundInterval: 5,
             Key.hideClockWhenRunning: true,
+            Key.showNotification: true,
+            Key.showTimeUpMessage: true,
+            Key.alertColor: TimerAlertColor.red.rawValue,
+            Key.alertMessage: Self.defaultAlertMessage,
         ])
         defaultMinutes = defaults.double(forKey: Key.defaultMinutes)
         incrementSeconds = defaults.integer(forKey: Key.incrementSeconds)
@@ -80,9 +139,20 @@ final class SettingsStore: ObservableObject {
         repeatSound = defaults.bool(forKey: Key.repeatSound)
         repeatSoundInterval = defaults.integer(forKey: Key.repeatSoundInterval)
         hideClockWhenRunning = defaults.bool(forKey: Key.hideClockWhenRunning)
+        showNotification = defaults.bool(forKey: Key.showNotification)
+        showTimeUpMessage = defaults.bool(forKey: Key.showTimeUpMessage)
+        let colorRawValue = defaults.string(forKey: Key.alertColor) ?? TimerAlertColor.red.rawValue
+        alertColor = TimerAlertColor(rawValue: colorRawValue) ?? .red
+        alertMessage = Self.sanitizeAlertMessage(defaults.string(forKey: Key.alertMessage) ?? Self.defaultAlertMessage)
         toggleHotkey = Self.load(key: Key.toggleHotkey) ?? .empty
         incrementHotkey = Self.load(key: Key.incrementHotkey) ?? .empty
         decrementHotkey = Self.load(key: Key.decrementHotkey) ?? .empty
+    }
+
+    static func sanitizeAlertMessage(_ message: String) -> String {
+        let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return defaultAlertMessage }
+        return String(trimmed.prefix(alertMessageLimit))
     }
 
     private func broadcastHotkeyChange() {
@@ -370,8 +440,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
             button.title = timeString(s)
 
         case .done:
-            button.image = nil
-            startPulse()
+            if store.showTimeUpMessage {
+                button.image = nil
+                startPulse()
+            } else {
+                stopPulse()
+                button.attributedTitle = NSAttributedString()
+                button.title = ""
+                button.image = NSImage(systemSymbolName: "clock", accessibilityDescription: "Timer done")
+            }
         }
     }
 
@@ -390,9 +467,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
     }
     private func renderPulse() {
         guard let button = statusItem.button else { return }
-        let color: NSColor = pulseOn ? .systemRed : NSColor.systemRed.withAlphaComponent(0.35)
+        let store = SettingsStore.shared
+        let baseColor = store.alertColor.nsColor
+        let color: NSColor = pulseOn ? baseColor : baseColor.withAlphaComponent(0.35)
         let attr = NSAttributedString(
-            string: "Time's up",
+            string: store.alertMessage,
             attributes: [
                 .foregroundColor: color,
                 .font: NSFont.menuBarFont(ofSize: 0)
@@ -581,7 +660,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
     private func handleTimerCompleted() {
         playCompletionSound()
         startSoundRepeat()
-        sendNotification()
+        if SettingsStore.shared.showNotification {
+            sendNotification()
+        }
         updateStatusItem()
     }
 
@@ -627,11 +708,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
     }
 
     private func sendNotification() {
+        let store = SettingsStore.shared
         let content = UNMutableNotificationContent()
         content.title = "Timer Completed"
-        content.body = "Your timer is up!"
+        content.body = store.alertMessage
         content.categoryIdentifier = "TIMER_DONE"
-        if SettingsStore.shared.playSound { content.sound = .default }
+        if store.playSound { content.sound = .default }
         if #available(macOS 12, *) { content.interruptionLevel = .timeSensitive }
         let request = UNNotificationRequest(identifier: "timerDone", content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request)
