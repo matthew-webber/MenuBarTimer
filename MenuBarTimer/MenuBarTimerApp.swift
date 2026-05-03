@@ -610,13 +610,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
         if controller.state != .idle { showingInput = false }
     }
 
-    func menuWillOpen(_ menu: NSMenu) {
-        // Opening the menu acknowledges a "done" pulse — natural since the user is
-        // already interacting with the timer to set the next one or dismiss it.
-        if case .done = controller.state {
-            controller.acknowledgeDone()
-        }
-    }
+    func menuWillOpen(_ menu: NSMenu) {}
 
     // MARK: Actions
 
