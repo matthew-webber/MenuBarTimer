@@ -75,8 +75,8 @@ struct SettingsView: View {
                     .frame(width: 160)
                 }
                 LabeledContent("Alert message") {
-                    TextField("", text: alertMessageBinding)
-                        .frame(width: 200)
+                    LimitedTextField(text: alertMessageBinding, maxCharacters: SettingsStore.alertMessageLimit)
+                        .frame(width: 200, height: 22)
                 }
             } footer: {
                 Text("Shown in the menu bar when a timer ends.")
@@ -128,7 +128,7 @@ struct SettingsView: View {
     private var shortcutsTab: some View {
         Form {
             Section {
-                shortcutRow(title: "Toggle (start / pause / dismiss)", binding: $store.toggleHotkey)
+                shortcutRow(title: "Start/pause timer", binding: $store.toggleHotkey)
                 shortcutRow(title: "Increase timer", binding: $store.incrementHotkey)
                 shortcutRow(title: "Decrease timer", binding: $store.decrementHotkey)
             } header: {
@@ -144,10 +144,17 @@ struct SettingsView: View {
     }
 
     private func shortcutRow(title: String, binding: Binding<HotkeyBinding>) -> some View {
-        LabeledContent(title) {
+        HStack(alignment: .center, spacing: 12) {
+            Text(title)
+                .font(.body.weight(.semibold))
+                // .lineLimit(1)
+
+            Spacer(minLength: 12)
+
             HotkeyRecorderField(binding: binding)
                 .frame(width: 220, height: 26)
         }
+        .padding(.vertical, 2)
     }
 
     private func previewSound() {
@@ -158,6 +165,7 @@ struct SettingsView: View {
     private var alertMessageBinding: Binding<String> {
         Binding(
             get: { store.alertMessage },
+//            set: { store.alertMessage = SettingsStore.sanitizeAlertMessage($0) }
             set: { store.alertMessage = SettingsStore.sanitizeAlertMessage($0) }
         )
     }
@@ -168,6 +176,44 @@ struct SettingsView: View {
         f.maximumFractionDigits = 2
         f.minimum = 0
         return f
+    }
+}
+
+// MARK: - Limited text field
+
+struct LimitedTextField: NSViewRepresentable {
+    @Binding var text: String
+    let maxCharacters: Int
+
+    func makeNSView(context: Context) -> NSTextField {
+        let tf = NSTextField()
+        tf.delegate = context.coordinator
+        tf.formatter = MaxLengthFormatter(maxCharacters: maxCharacters)
+        tf.bezelStyle = .roundedBezel
+        tf.isBezeled = true
+        tf.drawsBackground = true
+        tf.font = .systemFont(ofSize: NSFont.systemFontSize)
+        tf.cell?.sendsActionOnEndEditing = true
+        tf.stringValue = text
+        return tf
+    }
+
+    func updateNSView(_ nsView: NSTextField, context: Context) {
+//        if nsView.stringValue != text {
+            nsView.stringValue = text
+//        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(text: $text) }
+
+    final class Coordinator: NSObject, NSTextFieldDelegate {
+        @Binding var text: String
+        init(text: Binding<String>) { _text = text }
+
+        func controlTextDidChange(_ notification: Notification) {
+            guard let tf = notification.object as? NSTextField else { return }
+            if tf.stringValue != text { text = tf.stringValue }
+        }
     }
 }
 

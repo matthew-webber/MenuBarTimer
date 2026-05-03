@@ -150,7 +150,7 @@ final class SettingsStore: ObservableObject {
     }
 
     static func sanitizeAlertMessage(_ message: String) -> String {
-        let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = message.trimmingCharacters(in: .newlines)
         guard !trimmed.isEmpty else { return defaultAlertMessage }
         return String(trimmed.prefix(alertMessageLimit))
     }
@@ -782,7 +782,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
 
 // MARK: - Text field formatting
 
-private final class MaxLengthFormatter: Formatter {
+final class MaxLengthFormatter: Formatter {
     private let maxCharacters: Int
 
     init(maxCharacters: Int) {
